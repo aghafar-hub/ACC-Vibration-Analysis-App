@@ -130,15 +130,14 @@ component as `s`.
 ## Known gaps
 
 See [API_CONTRACT.md](./API_CONTRACT.md#known-gaps) for the write-related
-gaps (no write verification, `updateAction`'s inconsistent payload shape,
-Limits Settings' SPM Alarm bug, the non-functional passcode, the unwired
-auto-sync config fields) — all reproduced from the original bundle, not
-introduced by this rebuild. Two more, specific to this document's scope:
+gaps (no write verification, the now-resolved `updateAction` payload
+question, the `updateRegisterLimits` column-shift bug, the non-functional
+passcode, the unwired auto-sync config fields) — all reproduced from the
+original bundle, not introduced by this rebuild. The backend source itself
+— `apps-script/Code.gs`, plus two confirmed bugs and a corrected version —
+is covered in [`apps-script/README.md`](../apps-script/README.md). One more,
+specific to this document's scope:
 
-- **The Compliance Tracker sheet's actual column layout is inferred, not
-  confirmed** — see [SHEET_SCHEMA.md](./SHEET_SCHEMA.md#compliance-tracker-inferred).
-  The backend hands the client already-reshaped per-equipment/per-month
-  JSON, so this app never sees (or needs to reconstruct) the raw sheet.
 - **This rebuild adds an `ErrorBoundary`** (`components/ErrorBoundary.jsx`)
   that the original doesn't have at all — an uncaught render error in the
   original blanks the page with no message. Everything else in

@@ -74,3 +74,17 @@ anyone who opened devtools). This rebuild keeps that same default
 that's a straight reconstruction of the original's actual behavior, not
 something this rebuild introduced. Nothing in this repo needs a `.env`
 file, and none should be added unless a genuine secret is introduced later.
+
+## The backend (Apps Script)
+
+This app has no server of its own, but the Google Apps Script Web App it
+depends on is real server-side code, and a copy of it now lives at
+[`apps-script/Code.gs`](../apps-script/Code.gs) — see
+[`apps-script/README.md`](../apps-script/README.md) for what it is, two
+real bugs found by comparing it against the live Sheet, and
+`apps-script/Code.fixed.gs`, a corrected version. None of this is deployed
+automatically by anything in this repo (there's no credential or mechanism
+here that could reach a Google Apps Script project); applying a fix means
+manually pasting `Code.fixed.gs` into the Sheet's Extensions → Apps Script
+editor and redeploying, per the setup steps in Settings → System → "Apps
+Script v3 — Setup Instructions" inside the running app.

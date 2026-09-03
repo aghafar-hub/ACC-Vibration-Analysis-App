@@ -11,7 +11,11 @@ staying behavior-faithful to the original.
 
 It uses the **same Google Sheet as its database**, through the same Apps
 Script Web App webhook contract — no changes to the sheet or the Apps
-Script are required to use this app.
+Script are required to use this app. A copy of that Apps Script backend
+itself is included at [`apps-script/`](./apps-script) — see
+[`apps-script/README.md`](./apps-script/README.md) for two real bugs found
+there (unrelated to this rebuild — they live entirely in that script) and
+a corrected version.
 
 **📖 Full documentation: [`docs/`](./docs/README.md)** — architecture, a
 file-by-file code guide, the Google Sheet schema, the webhook API
@@ -79,6 +83,7 @@ src/
     GraphsDashboard.jsx / ComplianceTracker.jsx / ActionTracker.jsx / LimitsSettings.jsx / Settings.jsx
 docs/                             full documentation (start at docs/README.md)
 legacy-exact-copy/                the original app's untouched compiled build, kept for reference
+apps-script/                      the Apps Script webhook backend (Code.gs) + a bugfixed Code.fixed.gs
 .github/workflows/                ci.yml (lint + format-check + build), deploy.yml (GitHub Pages)
 ```
 
@@ -94,11 +99,14 @@ sections for detail:
   [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#known-gaps).
 - **`updateAction`'s payload shape doesn't match `appendAction`'s** — an
   edited action's fields are sent under different (camelCase) keys than a
-  new one's. See
+  new one's, though confirmed harmless: the backend accepts either. See
   [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#known-gaps).
-- **Limits Settings silently overwrites the SPM Alarm limit** with
-  whatever Caution is set to, on every save from that page. See
-  [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#known-gaps).
+- **Saving Equipment Register or Limits Settings limits writes to the
+  wrong column, on the live Apps Script backend** — an off-by-one in
+  `updateRegisterLimits` corrupts the Points/SPM Type columns and shifts
+  every RMS/SPM threshold one slot over. Not a bug in this app's code; see
+  [`apps-script/README.md`](./apps-script/README.md) for the exact mapping
+  and a corrected script.
 - **Settings' Configuration pass key (`17593`) is not real access
   control** — a hardcoded string compared client-side. See
   [`docs/API_CONTRACT.md`](./docs/API_CONTRACT.md#known-gaps).
