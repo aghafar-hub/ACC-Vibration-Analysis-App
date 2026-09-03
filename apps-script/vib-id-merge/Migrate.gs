@@ -202,46 +202,60 @@ function migrateEquipmentIds() {
   var summary = [];
 
   MIGRATION_TARGETS.forEach(function (target) {
-    var sheet = ss.getSheetByName(target.sheet);
-    if (!sheet) {
-      summary.push(target.sheet + ': sheet not found, skipped');
-      return;
-    }
-    var cfg = SHEET_CFG[target.sheet];
-    var dataStart = cfg ? cfg.dataStartRow : 2;
-    var lastRow = sheet.getLastRow();
-    var lastCol = sheet.getLastColumn();
-    if (lastRow < dataStart || lastCol < 1) {
-      summary.push(target.sheet + ': no data rows, skipped');
-      return;
-    }
-
-    var col;
-    if (target.mode === 'byHeader') {
-      var headerRow = cfg ? cfg.headerRow : 1;
-      var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
-      col = headers.indexOf(target.header) + 1; // 1-based; 0 if not found
-      if (!col) {
-        summary.push(target.sheet + ': header "' + target.header + '" not found, skipped');
+    try {
+      var sheet = ss.getSheetByName(target.sheet);
+      if (!sheet) {
+        summary.push(target.sheet + ': sheet not found, skipped');
         return;
       }
-    } else {
-      col = target.col;
-    }
-
-    var numRows = lastRow - dataStart + 1;
-    var range = sheet.getRange(dataStart, col, numRows, 1);
-    var values = range.getValues();
-    var changed = 0;
-    for (var i = 0; i < values.length; i++) {
-      var current = String(values[i][0] || '').trim();
-      if (EQUIPMENT_ID_MAP.hasOwnProperty(current)) {
-        values[i][0] = EQUIPMENT_ID_MAP[current];
-        changed++;
+      var cfg = SHEET_CFG[target.sheet];
+      var dataStart = cfg ? cfg.dataStartRow : 2;
+      var lastRow = sheet.getLastRow();
+      var lastCol = sheet.getLastColumn();
+      if (lastRow < dataStart || lastCol < 1) {
+        summary.push(target.sheet + ': no data rows, skipped');
+        return;
       }
+
+      var col;
+      if (target.mode === 'byHeader') {
+        var headerRow = cfg ? cfg.headerRow : 1;
+        var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+        col = headers.indexOf(target.header) + 1; // 1-based; 0 if not found
+        if (!col) {
+          summary.push(target.sheet + ': header "' + target.header + '" not found, skipped');
+          return;
+        }
+      } else {
+        col = target.col;
+      }
+
+      var numRows = lastRow - dataStart + 1;
+      var range = sheet.getRange(dataStart, col, numRows, 1);
+      var values = range.getValues();
+      var changed = 0;
+      for (var i = 0; i < values.length; i++) {
+        var current = String(values[i][0] || '').trim();
+        if (EQUIPMENT_ID_MAP.hasOwnProperty(current)) {
+          values[i][0] = EQUIPMENT_ID_MAP[current];
+          changed++;
+        }
+      }
+      if (changed > 0) {
+        // This column may have "reject invalid input" data validation (a
+        // dropdown sourced from the OLD Register's Equipment ID list) —
+        // writing a new-format ID would be rejected by that rule until the
+        // Register is replaced with new-format IDs too. Clearing
+        // validation on just this range before writing sidesteps the
+        // ordering dependency entirely; re-apply a dropdown against the
+        // new Register afterward if you want it back.
+        range.clearDataValidations();
+        range.setValues(values);
+      }
+      summary.push(target.sheet + ': ' + changed + ' of ' + values.length + ' rows renamed (column ' + col + ')');
+    } catch (err) {
+      summary.push(target.sheet + ': FAILED — ' + err);
     }
-    if (changed > 0) range.setValues(values);
-    summary.push(target.sheet + ': ' + changed + ' of ' + values.length + ' rows renamed (column ' + col + ')');
   });
 
   Logger.log(summary.join('\n'));
