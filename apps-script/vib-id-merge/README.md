@@ -81,6 +81,39 @@ guessed.
    `readAll()`. Paste into the sandbox project, Deploy → Manage
    deployments → New version → Deploy.
 
+## Post-migration audit
+
+**`remaining-old-format-audit.csv`** — after running the migration and
+pasting the rebuilt Register/VIB Point Map, I re-read the sandbox sheet and
+regex-scanned it for every remaining old-format ID (`\d{3}\.[A-Za-z]{2,3}\.\d+`),
+cross-checked each against the migration map and master DB, and classified
+all 199 distinct ones found:
+
+- **155 `EDIT`** — already in `equipment-id-migration-map.csv`, just
+  weren't renamed yet in whichever sheet they're in. This is the bulk of
+  it — re-run the 4 remaining `Migrate.gs` functions (`migrateSpmData`,
+  `migrateLastRmsReading`, `migrateLastSpmReading`,
+  `migrateComplianceTracker`) and check each one's log actually reports a
+  nonzero rename count, not a `FAILED` line.
+- **21 `ADD (needs vib points)`** — real equipment in `EQUIPMENT_MASTER`
+  (e.g. all of `761/762.WI.21x` — 15 Water injection units) with zero
+  vibration points defined in `VIB_POINT_MASTER`. Needs someone to add
+  their points to the master DB, or tell me the points directly.
+- **17 `ADD (not in master DB)`** — not in the master DB at all, e.g. the
+  `441/442.WI.00x` series and `212.HC.100`'s close cousin `645.BL.58x`.
+  Needs full onboarding (name, line, points) before anything can be built
+  for these.
+- **4 `ADD (mirror twin)`** — e.g. `322.MD.152` (30 cells of real history)
+  has no master DB points, but its Line1 twin `321.MD152` has an identical
+  point structure already defined. Very likely just a master DB gap for
+  that specific line, not a different asset — but I didn't invent points
+  for these without you confirming it's actually the same equipment type.
+- **2 `ADD (has vib points, wasn't in old sheet)`** — `533.MD.301` /
+  `534.MD.301` already have master DB points, just weren't part of your
+  original Register (note: NOT the same as `533.MD.302`/`534.MD.302`,
+  which already are — worth double-checking these aren't a typo of each
+  other in your historical data).
+
 ## What's still not done
 
 No `src/` changes yet — the React app doesn't request or use `vibPoints`,
