@@ -41,13 +41,27 @@ guessed.
    is here so you can eyeball it before running anything.
 2. **`Migrate.gs`** — paste as an _additional_ file in the sandbox's Apps
    Script project (alongside `Code.v2.gs` — Apps Script projects hold
-   multiple `.gs` files). Run `migrateEquipmentIds()` once from the editor
-   (Run → migrateEquipmentIds), check View → Logs for the per-sheet count.
-   Renames Equipment ID cells in `📥 RMS DATA`, `📥 SPM DATA`,
-   `📋 Last RMS Reading`, `📋 Last SPM Reading`, and `📋 Compliance
-   Tracker` (column C) from old IDs to new. Safe to re-run — anything
-   already on a new-format ID is left alone. Does **not** touch the
-   Register tabs (step 3 replaces those wholesale instead).
+   multiple `.gs` files). **Run these 5 functions one at a time**, as 5
+   separate Run clicks (pick each from the editor's function dropdown), not
+   the combined `migrateEquipmentIds()` — on a sheet this size, one big run
+   burns most of its execution time budget on the first large sheet and
+   every sheet after it dies with "Service timed out: Spreadsheets" before
+   it can even start:
+   - `migrateRmsData()`
+   - `migrateSpmData()`
+   - `migrateLastRmsReading()`
+   - `migrateLastSpmReading()`
+   - `migrateComplianceTracker()`
+
+   Check View → Executions (or View → Logs right after each run) for that
+   sheet's change count — it also logs progress every 1,000 rows so a run
+   in progress isn't a silent wait. Renames Equipment ID cells in
+   `📥 RMS DATA`, `📥 SPM DATA`, `📋 Last RMS Reading`, `📋 Last SPM
+   Reading`, and `📋 Compliance Tracker` (column C) from old IDs to new.
+   Safe to re-run any of them — anything already on a new-format ID (or
+   already renamed by an earlier partial run) is left alone, so if one
+   fails partway through, just run that same function again. Does **not**
+   touch the Register tabs (step 3 replaces those wholesale instead).
 3. **`rms-register-rebuild.csv`** / **`spm-register-rebuild.csv`** — the
    full replacement content for `⚙ RMS Register` / `⚙ SPM Register`
    (165 and 158 rows — 7 of the 165 have RMS points but no SPM points

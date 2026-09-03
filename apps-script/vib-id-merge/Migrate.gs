@@ -5,10 +5,30 @@
  * ("111.CP.400") to the ACC Platform master DB's format ("111.CP400"),
  * for the 158 equipment that exist in both. Paste this as an ADDITIONAL
  * file in the same Apps Script project as Code.v2.gs (Apps Script projects
- * support multiple .gs files — use the "+" next to Files in the editor),
- * then run migrateEquipmentIds() once from the editor's function dropdown
- * (Run > migrateEquipmentIds). Check the execution log (View > Logs) for
- * the per-sheet change counts afterward.
+ * support multiple .gs files — use the "+" next to Files in the editor).
+ *
+ * RUN ONE SHEET AT A TIME, not migrateEquipmentIds() — the RMS DATA sheet
+ * alone (6,586 rows) took nearly all of one execution's time budget, and
+ * every large sheet after it in the same run was killed with "Service
+ * timed out: Spreadsheets" before it could even start. Apps Script gives
+ * each *execution* its own fresh time budget, so running these as 5
+ * separate executions (5 separate Run clicks, picking a different function
+ * from the dropdown each time) gets each sheet its own full budget:
+ *
+ *   1. migrateRmsData()            — already done if you saw "6156 of
+ *                                     6586 rows renamed" in your log; safe
+ *                                     to re-run anyway, it'll just report 0
+ *   2. migrateSpmData()
+ *   3. migrateLastRmsReading()
+ *   4. migrateLastSpmReading()
+ *   5. migrateComplianceTracker()
+ *
+ * migrateEquipmentIds() (runs all 5 in one execution) is kept for
+ * convenience on a small sandbox, but expect it to hit the same timeout on
+ * a sheet this size — prefer the per-sheet functions above.
+ *
+ * Check the execution log (View > Logs, or View > Executions) after each
+ * run for that sheet's change count.
  *
  * This does NOT touch "⚙ RMS Register" or "⚙ SPM Register" — those get
  * REPLACED wholesale by rms-register-rebuild.csv / spm-register-rebuild.csv
@@ -197,67 +217,106 @@ var MIGRATION_TARGETS = [
   { sheet: SHEET_COMPLIANCE, mode: 'byIndex',  col: 3 }, // column C
 ];
 
-function migrateEquipmentIds() {
+// Batch size for each read/write pair, so even one sheet's migration makes
+// steady, visible progress via the log instead of one giant call that
+// either fully succeeds or times out with nothing to show for it.
+var MIGRATE_BATCH_SIZE = 1000;
+
+function migrateOneSheet(target) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var summary = [];
+  var sheet = ss.getSheetByName(target.sheet);
+  if (!sheet) {
+    var msg = target.sheet + ': sheet not found, skipped';
+    Logger.log(msg);
+    return msg;
+  }
+  var cfg = SHEET_CFG[target.sheet];
+  var dataStart = cfg ? cfg.dataStartRow : 2;
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < dataStart || lastCol < 1) {
+    var msg2 = target.sheet + ': no data rows, skipped';
+    Logger.log(msg2);
+    return msg2;
+  }
 
-  MIGRATION_TARGETS.forEach(function (target) {
+  var col;
+  if (target.mode === 'byHeader') {
+    var headerRow = cfg ? cfg.headerRow : 1;
+    var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+    col = headers.indexOf(target.header) + 1; // 1-based; 0 if not found
+    if (!col) {
+      var msg3 = target.sheet + ': header "' + target.header + '" not found, skipped';
+      Logger.log(msg3);
+      return msg3;
+    }
+  } else {
+    col = target.col;
+  }
+
+  var totalRows = lastRow - dataStart + 1;
+  var changed = 0;
+  for (var offset = 0; offset < totalRows; offset += MIGRATE_BATCH_SIZE) {
+    var batchRows = Math.min(MIGRATE_BATCH_SIZE, totalRows - offset);
+    var range = sheet.getRange(dataStart + offset, col, batchRows, 1);
+    var values = range.getValues();
+    var batchChanged = 0;
+    for (var i = 0; i < values.length; i++) {
+      var current = String(values[i][0] || '').trim();
+      if (EQUIPMENT_ID_MAP.hasOwnProperty(current)) {
+        values[i][0] = EQUIPMENT_ID_MAP[current];
+        batchChanged++;
+      }
+    }
+    if (batchChanged > 0) {
+      // This column may have "reject invalid input" data validation (a
+      // dropdown sourced from the OLD Register's Equipment ID list) —
+      // writing a new-format ID would be rejected by that rule until the
+      // Register is replaced with new-format IDs too. Clearing validation
+      // on just this range before writing sidesteps the ordering
+      // dependency entirely; re-apply a dropdown against the new Register
+      // afterward if you want it back.
+      range.clearDataValidations();
+      range.setValues(values);
+      changed += batchChanged;
+    }
+    Logger.log(target.sheet + ': batch ' + (offset + 1) + '-' + (offset + batchRows) + ' of ' + totalRows + ' done, ' + batchChanged + ' renamed');
+  }
+
+  var summary = target.sheet + ': ' + changed + ' of ' + totalRows + ' rows renamed (column ' + col + ')';
+  Logger.log(summary);
+  return summary;
+}
+
+function migrateRmsData() {
+  return migrateOneSheet(MIGRATION_TARGETS[0]);
+}
+function migrateSpmData() {
+  return migrateOneSheet(MIGRATION_TARGETS[1]);
+}
+function migrateLastRmsReading() {
+  return migrateOneSheet(MIGRATION_TARGETS[2]);
+}
+function migrateLastSpmReading() {
+  return migrateOneSheet(MIGRATION_TARGETS[3]);
+}
+function migrateComplianceTracker() {
+  return migrateOneSheet(MIGRATION_TARGETS[4]);
+}
+
+// Convenience: runs all 5 in one execution. Fine for a small sandbox; on a
+// sheet this size, prefer running the 5 functions above individually
+// instead — each gets its own fresh execution time budget.
+function migrateEquipmentIds() {
+  var summary = MIGRATION_TARGETS.map(function (target) {
     try {
-      var sheet = ss.getSheetByName(target.sheet);
-      if (!sheet) {
-        summary.push(target.sheet + ': sheet not found, skipped');
-        return;
-      }
-      var cfg = SHEET_CFG[target.sheet];
-      var dataStart = cfg ? cfg.dataStartRow : 2;
-      var lastRow = sheet.getLastRow();
-      var lastCol = sheet.getLastColumn();
-      if (lastRow < dataStart || lastCol < 1) {
-        summary.push(target.sheet + ': no data rows, skipped');
-        return;
-      }
-
-      var col;
-      if (target.mode === 'byHeader') {
-        var headerRow = cfg ? cfg.headerRow : 1;
-        var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
-        col = headers.indexOf(target.header) + 1; // 1-based; 0 if not found
-        if (!col) {
-          summary.push(target.sheet + ': header "' + target.header + '" not found, skipped');
-          return;
-        }
-      } else {
-        col = target.col;
-      }
-
-      var numRows = lastRow - dataStart + 1;
-      var range = sheet.getRange(dataStart, col, numRows, 1);
-      var values = range.getValues();
-      var changed = 0;
-      for (var i = 0; i < values.length; i++) {
-        var current = String(values[i][0] || '').trim();
-        if (EQUIPMENT_ID_MAP.hasOwnProperty(current)) {
-          values[i][0] = EQUIPMENT_ID_MAP[current];
-          changed++;
-        }
-      }
-      if (changed > 0) {
-        // This column may have "reject invalid input" data validation (a
-        // dropdown sourced from the OLD Register's Equipment ID list) —
-        // writing a new-format ID would be rejected by that rule until the
-        // Register is replaced with new-format IDs too. Clearing
-        // validation on just this range before writing sidesteps the
-        // ordering dependency entirely; re-apply a dropdown against the
-        // new Register afterward if you want it back.
-        range.clearDataValidations();
-        range.setValues(values);
-      }
-      summary.push(target.sheet + ': ' + changed + ' of ' + values.length + ' rows renamed (column ' + col + ')');
+      return migrateOneSheet(target);
     } catch (err) {
-      summary.push(target.sheet + ': FAILED — ' + err);
+      var msg = target.sheet + ': FAILED — ' + err;
+      Logger.log(msg);
+      return msg;
     }
   });
-
   Logger.log(summary.join('\n'));
   return summary;
 }
