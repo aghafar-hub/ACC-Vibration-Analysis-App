@@ -1,0 +1,27 @@
+Sheet Equipment ID,Sheet Equipment Name (fill in if known),Closest master DB candidates (same line+type)
+212.HC.100,,
+341.BE.040,,341.BE041 (Bucket elevator)
+342.BE.041,,342.BE051 (Bucket elevator)
+342.BE.050,,342.BE051 (Bucket elevator)
+351.BE.340,,351.BE341 (Bucket elevator)
+352.BE.340,,352.BE341 (Bucket elevator)
+441.WI.001,,441.WI130 (Water injection)
+441.WI.002,,441.WI130 (Water injection)
+441.WI.003,,441.WI130 (Water injection)
+441.WI.004,,441.WI130 (Water injection)
+442.WI.001,,442.WI130 (Water injection)
+442.WI.002,,442.WI130 (Water injection)
+442.WI.003,,442.WI130 (Water injection)
+442.WI.004,,442.WI130 (Water injection)
+442.WI.005,,442.WI130 (Water injection)
+533.MD.302,,533.MD135 (Main drive); 533.MD140 (Main drive); 533.MD301 (Main drive)
+534.MD.302,,534.MD135 (Main drive); 534.MD140 (Main drive); 534.MD301 (Main drive)
+644.FN.952,,644.FN922 (Fan)
+645.BL.580,,
+645.BL.585,,
+645.BL.630,,
+645.BL.635,,
+645.FN.952,,645.FN922 (Fan)
+646.FN.952,,646.FN922 (Fan)
+743.CP.115,,743.CP110 (Compressor); 743.CP111 (Compressor); 743.CP112 (Compressor); 743.CP113 (Compressor); 743.CP114 (Compressor)
+744.CP.114,,744.CP110 (Compressor); 744.CP111 (Compressor); 744.CP112 (Compressor); 744.CP113 (Compressor)

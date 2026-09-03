@@ -8,6 +8,11 @@ which is deliberately never touched — so it can actually be fixed.
 
 ## Files
 
+- **`vib-id-merge/`** — a sandbox-only kit for adopting the ACC Platform
+  asset master DB's `VIB_ID` as a permanent point identifier: an importable
+  CSV for a new `🔗 VIB Point Map` tab, a review list for equipment that
+  didn't auto-match, and `Code.v2.gs` (the backend addition). See
+  `vib-id-merge/README.md`.
 - **`Code.gs`** — the script currently deployed behind the app's default
   webhook URL (`DEFAULT_WEBHOOK_URL` in `src/config.js`), reproduced
   verbatim as supplied, version "v3.1". One transcription artifact was
