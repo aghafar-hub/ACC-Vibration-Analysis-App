@@ -45,13 +45,18 @@ data access happens client-side against the Apps Script webhook.
 `vite.config.js` sets:
 
 ```js
-base: "/acc-vibration-analysis-app/";
+base: "/ACC-Vibration-Analysis-App/";
 ```
 
-This matches being served from a subpath like
-`https://<user>.github.io/acc-vibration-analysis-app/`. If you deploy to a
-custom domain or a host's root path instead, change this to `base: "/"`
-before building — otherwise asset URLs will 404.
+This has to match the exact, case-sensitive path this app is served from —
+GitHub Pages paths are case-sensitive, and this repo's real name is
+`ACC-Vibration-Analysis-App` (mixed case), so the live URL is
+`https://aghafar-hub.github.io/ACC-Vibration-Analysis-App/`. A casing
+mismatch here doesn't 404 the page itself (`index.html` still loads) — it
+404s every asset `index.html` references, which renders as a blank white
+screen with no visible error (this shipped broken once for exactly that
+reason before being caught and fixed). If you deploy to a custom domain or
+a host's root path instead, change this to `base: "/"` before building.
 
 ### Deploying to GitHub Pages
 
