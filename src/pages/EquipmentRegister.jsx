@@ -4,13 +4,26 @@ import { updateRegisterLimits } from "../api";
 import EquipmentEditModal from "../components/EquipmentEditModal";
 import Icon from "../components/Icon";
 import { ICONS } from "../components/icons";
+import { vibPointKey } from "../domain";
 import { normalizePoint } from "../parsers";
 
 // Equipment master list: totals, filters, and a table of every registered
 // equipment's name plate/type/line/limits/points, with an Edit modal that
 // writes back to both the RMS and SPM Equipment Register sheets via
 // updateRegisterLimits. Ported from the original's `Fm`.
-export default function EquipmentRegister({ rmsRegister, spmRegister, registryList, webhookUrl, setRmsRegister, setSpmRegister }) {
+//
+// `vibIdMap` (equipmentId|point|family -> VIB_ID) is a sandbox-only
+// addition (apps-script/vib-id-merge/README.md) — shown as a "VIB IDs"
+// coverage count per row, empty/all-dashes on production.
+export default function EquipmentRegister({
+  rmsRegister,
+  spmRegister,
+  registryList,
+  webhookUrl,
+  setRmsRegister,
+  setSpmRegister,
+  vibIdMap,
+}) {
   const { T, s } = useTheme();
   const [search, setSearch] = useState("");
   const [line, setLine] = useState("");
@@ -43,6 +56,8 @@ export default function EquipmentRegister({ rmsRegister, spmRegister, registryLi
         const rms = rmsByEq[eid];
         const spm = spmByEq[eid];
         const base = rms || spm || {};
+        const allPoints = [...(rms?.points || []).map((p) => [p, "RMS"]), ...(spm?.points || []).map((p) => [p, "SPM"])];
+        const vibMatched = allPoints.filter(([p, family]) => vibIdMap?.[vibPointKey(eid, p, family)]).length;
         return {
           eid,
           name: base.equipment || "",
@@ -51,10 +66,12 @@ export default function EquipmentRegister({ rmsRegister, spmRegister, registryLi
           line: base.line || "",
           rms,
           spm,
+          vibMatched,
+          vibTotal: allPoints.length,
         };
       })
       .sort((a, b) => (a.line === b.line ? a.eid.localeCompare(b.eid) : a.line.localeCompare(b.line)));
-  }, [rmsRegister, spmRegister]);
+  }, [rmsRegister, spmRegister, vibIdMap]);
 
   const equipmentOptions = useMemo(
     () =>
@@ -87,6 +104,7 @@ export default function EquipmentRegister({ rmsRegister, spmRegister, registryLi
     textAlign: "left",
   };
   const tdStyle = { padding: "7px 10px", borderBottom: `1px solid ${T.border2}`, fontSize: 12.5 };
+  const hasVibData = Object.keys(vibIdMap || {}).length > 0;
 
   const save = (form) => {
     if (!webhookUrl) {
@@ -233,6 +251,7 @@ export default function EquipmentRegister({ rmsRegister, spmRegister, registryLi
               <th style={thStyle}>RMS Limits (G/A/Al)</th>
               <th style={thStyle}>RMS Points</th>
               <th style={thStyle}>SPM Limits (N/C/Al)</th>
+              {hasVibData && <th style={thStyle}>VIB IDs</th>}
               <th style={thStyle}>Actions</th>
             </tr>
           </thead>
@@ -291,6 +310,17 @@ export default function EquipmentRegister({ rmsRegister, spmRegister, registryLi
                     <span style={{ color: T.textMuted }}>—</span>
                   )}
                 </td>
+                {hasVibData && (
+                  <td style={{ ...tdStyle, textAlign: "center" }}>
+                    {row.vibTotal > 0 ? (
+                      <span style={{ color: row.vibMatched === row.vibTotal ? T.success : T.warning, fontWeight: 700 }}>
+                        {row.vibMatched}/{row.vibTotal}
+                      </span>
+                    ) : (
+                      <span style={{ color: T.textMuted }}>—</span>
+                    )}
+                  </td>
+                )}
                 <td style={tdStyle}>
                   <button style={{ ...s.btnSm, fontSize: 11 }} onClick={() => setEditing({ row })}>
                     <Icon d={ICONS.edit} size={12} /> Edit
@@ -300,7 +330,7 @@ export default function EquipmentRegister({ rmsRegister, spmRegister, registryLi
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ padding: 30, textAlign: "center", color: T.textMuted }}>
+                <td colSpan={hasVibData ? 10 : 9} style={{ padding: 30, textAlign: "center", color: T.textMuted }}>
                   No equipment found.
                 </td>
               </tr>

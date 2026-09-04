@@ -3,7 +3,7 @@ import { appendRow, deleteLastRMS, deleteLastSPM, deleteRow, readAll, updateRow,
 import { configStore, DEFAULT_WEBHOOK_URL, loadThresholdOverrides, saveThresholdOverrides } from "./config";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
-import { classifyComplianceStatus, resolveThresholds, rmsStatus, spmStatus } from "./domain";
+import { classifyComplianceStatus, resolveThresholds, rmsStatus, spmStatus, vibPointKey } from "./domain";
 import { PAGE_TITLES } from "./navigation";
 import {
   RMS_HEADERS,
@@ -16,6 +16,7 @@ import {
   rowToRMS,
   rowToSpmRegister,
   rowToSPM,
+  rowToVibPoint,
   SPM_HEADERS,
   spmToRow,
 } from "./parsers";
@@ -55,6 +56,7 @@ export default function App() {
   const [lastRms, setLastRms] = useState([]);
   const [lastSpm, setLastSpm] = useState([]);
   const [actions, setActions] = useState([]);
+  const [vibPoints, setVibPoints] = useState([]);
   const [thresholdsMap, setThresholdsMap] = useState({});
   const [syncState, setSyncState] = useState({ status: "idle", message: "Not synced yet" });
 
@@ -115,6 +117,12 @@ export default function App() {
       setLastRms((data.lastRms || []).map(rowToLastRMS));
       setLastSpm((data.lastSpm || []).map(rowToLastSPM));
       setActions((data.actions || []).map(rowToAction));
+      // `vibPoints` only exists on webhooks that have the sandbox's
+      // "🔗 VIB Point Map" tab wired into their readAll() (Code.v2.gs) —
+      // production's response simply won't have this key, which is fine,
+      // everything downstream already treats an empty list as "no VIB IDs
+      // available yet" rather than an error.
+      setVibPoints((data.vibPoints || []).map(rowToVibPoint));
       if (data.config && typeof data.config === "object") {
         const merged = { ...configRef.current };
         if (data.config.webhookUrl) merged.webhookUrl = data.config.webhookUrl;
@@ -146,6 +154,18 @@ export default function App() {
     return map;
   }, [rmsRegister, spmRegister]);
   const registryList = useMemo(() => Object.values(registryMap).sort((a, b) => a.equipmentId.localeCompare(b.equipmentId)), [registryMap]);
+
+  // equipmentId|point|family -> vibId, per vibPointKey() in domain.js. Empty
+  // whenever the current webhook has no VIB Point Map tab (production,
+  // today) — every consumer treats a missing key as "no VIB ID yet", not
+  // an error.
+  const vibIdMap = useMemo(() => {
+    const map = {};
+    vibPoints.forEach((vp) => {
+      if (vp.vibId) map[vibPointKey(vp.equipmentId, vp.description, vp.family)] = vp.vibId;
+    });
+    return map;
+  }, [vibPoints]);
 
   const actionCounts = useMemo(
     () => ({
@@ -310,6 +330,7 @@ export default function App() {
         webhookUrl={webhookUrl}
         compliance={compliance}
         setCompliance={setCompliance}
+        vibIdMap={vibIdMap}
       />
     );
   } else if (page === "equipreg") {
@@ -321,6 +342,7 @@ export default function App() {
         webhookUrl={webhookUrl}
         setRmsRegister={setRmsRegister}
         setSpmRegister={setSpmRegister}
+        vibIdMap={vibIdMap}
       />
     );
   } else if (page === "registry") {

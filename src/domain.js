@@ -11,6 +11,13 @@ export const DEFAULT_THRESHOLDS = {
   spm: { normal: 20, caution: 35 },
 };
 
+// VIB Point Map lookup key — shared by App.jsx (building the map from
+// vibPoints) and every page that looks a vibId up by equipment+point+family,
+// so the two sides can never drift out of sync with each other.
+export function vibPointKey(equipmentId, point, family) {
+  return `${equipmentId}|${point}|${family}`;
+}
+
 // Severity ranking shared by RMS-style ("Good"/"Acceptable"/"Alarm"/"Danger")
 // and SPM-style ("Normal"/"Caution") status words, so the two vocabularies
 // can be compared directly (Normal ties with Good, Caution ties with

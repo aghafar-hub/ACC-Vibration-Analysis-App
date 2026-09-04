@@ -5,7 +5,7 @@ import Icon from "../components/Icon";
 import Modal from "../components/Modal";
 import StatusBadge from "../components/StatusBadge";
 import { ICONS } from "../components/icons";
-import { resolveThresholds, rmsColorKey, rmsStatus, spmColorKey, spmStatus, worseStatus } from "../domain";
+import { resolveThresholds, rmsColorKey, rmsStatus, spmColorKey, spmStatus, vibPointKey, worseStatus } from "../domain";
 import { monthKey, parseNumber } from "../parsers";
 
 const RMS_FIELDS = ["axial", "gear", "horizontal", "vertical"];
@@ -16,7 +16,12 @@ const RMS_FIELDS = ["axial", "gear", "horizontal", "vertical"];
 // an updateCompliance write and locally updates the Compliance Tracker's
 // current month to "YES" for this equipment, using whichever reading came
 // back most severe. Ported from the original's `Em`.
-export default function NewReading({ registryList, rmsRegMap, spmRegMap, thresholdsMap, mutations, webhookUrl, setCompliance }) {
+//
+// `vibIdMap` (equipmentId|point|family -> VIB_ID, from App.jsx) is a
+// sandbox-only addition — see apps-script/vib-id-merge/README.md. It's
+// shown as a small badge next to each point when a match exists; empty on
+// production, where no card shows a badge at all.
+export default function NewReading({ registryList, rmsRegMap, spmRegMap, thresholdsMap, mutations, webhookUrl, setCompliance, vibIdMap }) {
   const { T, s } = useTheme();
   const [equipmentId, setEquipmentId] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -195,10 +200,14 @@ export default function NewReading({ registryList, rmsRegMap, spmRegMap, thresho
               ].filter((v) => v !== null);
               const maxVel = nums.length ? Math.max(...nums) : null;
               const status = rmsStatus(maxVel, thresholds);
+              const vibId = vibIdMap?.[vibPointKey(equipmentId, point, "RMS")];
               return (
                 <div key={point} style={{ ...s.cardSub, marginBottom: 10 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700, color: T.textHighlight, fontSize: 13 }}>{point}</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <span style={{ fontWeight: 700, color: T.textHighlight, fontSize: 13 }}>{point}</span>
+                      {vibId && <span style={{ fontSize: 10.5, color: T.textMuted, fontFamily: "monospace" }}>{vibId}</span>}
+                    </div>
                     {maxVel !== null && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontWeight: 700, color: T.textHighlight }}>{maxVel.toFixed(2)} mm/s</span>
@@ -238,10 +247,14 @@ export default function NewReading({ registryList, rmsRegMap, spmRegMap, thresho
             {spmPoints.map((point) => {
               const values = spmForm[point] || {};
               const status = spmStatus(parseNumber(values.hdm), thresholds);
+              const vibId = vibIdMap?.[vibPointKey(equipmentId, point, "SPM")];
               return (
                 <div key={point} style={{ ...s.cardSub, marginBottom: 10 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700, color: T.textHighlight, fontSize: 13 }}>{point}</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <span style={{ fontWeight: 700, color: T.textHighlight, fontSize: 13 }}>{point}</span>
+                      {vibId && <span style={{ fontSize: 10.5, color: T.textMuted, fontFamily: "monospace" }}>{vibId}</span>}
+                    </div>
                     {values.hdm && <StatusBadge status={status} colorKey={spmColorKey(status)} />}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>

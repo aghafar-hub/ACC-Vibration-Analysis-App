@@ -257,6 +257,25 @@ export function rowToRmsRegister(row) {
 
 // ── Equipment Register (SPM side) ──────────────────────────────────────
 
+// ── VIB Point Map (ACC Platform master DB merge) ───────────────────────
+// Sandbox-only tab, not present on the production webhook — readAll()
+// simply omits `vibPoints` there, so every consumer of this treats an
+// empty/missing list as "no VIB IDs available yet" rather than an error.
+// See apps-script/vib-id-merge/README.md for the merge itself.
+
+export function rowToVibPoint(row) {
+  return {
+    _id: `VIB|${row["VIB ID"] || ""}`,
+    vibId: String(row["VIB ID"] || "").trim(),
+    equipmentId: String(row["Equipment ID"] || "").trim(),
+    positionCode: String(row["Position Code"] || "").trim(),
+    family: String(row.Family || "").trim(),
+    description: normalizePoint(row["Point Description"]),
+    status: String(row.Status || ""),
+    _rowNum: row._rowNum,
+  };
+}
+
 export function rowToSpmRegister(row) {
   const equipmentId = String(row["Equipment ID"] || "").trim();
   const points = String(row.Points || "")
