@@ -116,12 +116,63 @@ all 199 distinct ones found:
 
 ## What's still not done
 
-No `src/` changes yet — the React app doesn't request or use `vibPoints`,
-and New Reading's point picker is still free text. Once you've run the
-migration and rebuild above and confirmed the sandbox looks right, the next
-step is wiring the app: New Reading's point picker sourced from
-`vibPoints` (carrying `vibId` onto every new reading), Equipment
-Register/Graphs showing VIB_ID per point, and only then switching
-`DEFAULT_WEBHOOK_URL` over from production to this sandbox once you're
-satisfied — that's a decision for you to make explicitly, not something
-this kit does on its own.
+`VIB_ID` is now wired into the React app — New Reading shows the VIB ID
+next to each point, and Equipment Register shows a VIB ID coverage column
+per equipment — but switching `DEFAULT_WEBHOOK_URL` over from production
+to this sandbox is still a decision for you to make explicitly, not
+something this kit does on its own.
+
+## RMS/SPM/GS data redesign (backfill for the new lean schema)
+
+`redesign_data_sheets.py` reads your real sandbox export (only the
+`📥 RMS DATA` and `📥 SPM DATA` tabs — everything else in that workbook was
+out of scope) and rewrites each historical row against
+`vib-point-map-import.csv`, producing ready-to-paste CSVs for the new
+schema (VIB ID + Equipment ID kept as separate columns, Max Velocity
+dropped since it's computed client-side, GS split into its own sheet):
+
+- `rms-data-redesigned.csv` — 6,552 rows. Columns: `#, VIB ID, Equipment ID,
+  Date, Axial (mm/s), Gear (mm/s), Horizontal (mm/s), Vertical (mm/s)`.
+- `spm-data-redesigned.csv` — 4,741 rows. Columns: `#, VIB ID, Equipment ID,
+  Date, HDm (dBsv), HDc (dBsv)`.
+- `gs-data.csv` — 392 rows, the new GS sheet. Columns: `#, VIB ID,
+  Equipment ID, Date, Gs`. Only rows that actually had a Gs value in the
+  source SPM tab are included.
+- `rms-data-unmatched.csv` / `spm-data-unmatched.csv` — every row where a
+  VIB ID could not be resolved (still included in the redesigned CSVs
+  above with a blank VIB ID, per your "backfill, don't discard" call —
+  these two files are just for finding and fixing them).
+
+Matching used a three-tier strategy so nothing gets guessed onto the wrong
+point: (1) exact match against the master DB's Point Description, including
+each part of semicolon-joined multi-value descriptions (e.g. "BL DE;
+blower Inboard Axial; ..." indexed as 4 separate lookups); (2) fallback
+match on the master DB's own Position Code (MDE, S2NDE, CDE, ...) derived
+from the live sheet's plain-English point name, but only when that
+position code maps to exactly one VIB_ID for that equipment/family — 73
+ambiguous position codes (e.g. SPM "CDE" split across two physical sensors)
+were deliberately left unmatched rather than guessed. The `645.BL580` /
+`645.BL630` / `645.BL635` → `465.BL...` correction agreed on earlier was
+re-applied here since this export still had the old typo'd IDs.
+
+**Results: 6,101/6,552 RMS rows matched (93.1%), 4,313/4,741 SPM rows
+matched (91.0%).** The remainder splits into two causes, neither of which
+this script can safely resolve on its own:
+
+- Equipment/points genuinely missing from `VIB_POINT_MASTER` — e.g.
+  `351.BL115`, `352.BL115`, `461.CP525`, `462.CP.535`, `744.CP113`,
+  `743.CP115`, and the still-unresolved `441/442.WI00x` series (master DB
+  models these as one equipment per line, `441.WI130`/`442.WI130`, while
+  the old sheet modeled 4-5 separate pieces — needs your modeling call,
+  not a script guess).
+- A handful of master-DB-internal inconsistencies where "inboard"/
+  "outboard" labels appear swapped from what the position code structurally
+  implies (e.g. "Shaft 2 inboard NDE" where the code implies outboard) —
+  flagged in the unmatched CSVs rather than force-matched.
+
+Paste `rms-data-redesigned.csv` / `spm-data-redesigned.csv` / `gs-data.csv`
+over the new `📥 RMS DATA` / `📥 SPM DATA` / new GS tabs in your sandbox once
+you've applied the new schema's column headers. The app's own read/write
+code (`parsers.js`, `App.jsx`) hasn't been updated for the new lean columns
+yet — that's the next step once you confirm the sheet-side update looks
+right.
