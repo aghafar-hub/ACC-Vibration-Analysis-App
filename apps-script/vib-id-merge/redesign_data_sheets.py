@@ -13,44 +13,21 @@ def normalize(s):
     s = (s.replace('ouboard', 'outboard').replace('outbord', 'outboard'))
     return s.lower()
 
-# Build VIB Point Map lookup: (equipmentId, family, normalized description) -> vibId.
-# Some master-DB descriptions are semicolon-joined multi-value strings (e.g.
-# "BL DE; blower Inboard Axial; blower Inboard Horizontal; blower Inboard
-# Vertical") describing several related labels for one physical point —
-# index each part individually as well as the full string, so a data row
-# whose Asset ID is just "BL DE" still resolves to the same VIB_ID.
 vib_lookup = {}
 with open(VIB_MAP_CSV, newline='', encoding='utf-8') as f:
     for row in csv.DictReader(f):
         eid, family, vib_id = row['Equipment ID'].strip(), row['Family'].strip().upper(), row['VIB ID']
         desc = row['Point Description']
-        parts = [desc] + desc.split(';')
-        for part in parts:
+        for part in [desc] + desc.split(';'):
             key = (eid, family, normalize(part))
             vib_lookup.setdefault(key, vib_id)
 
-print('VIB lookup entries:', len(vib_lookup))
-
-# Second-pass fallback: some equipment's master-DB descriptions use entirely
-# different vocabulary from the live sheet's plain point names (e.g.
-# "744.CP113"'s CDE position is "Male Rotor In Axial; ..." — no "Compressor
-# DE" text anywhere), so text matching alone can't resolve them. But the
-# VIB Point Map's own Position Code (CDE, MDE, S1DE, S2NDE, ...) is a
-# reliable, unambiguous key — build a second index straight from it, and
-# derive the same style of code from the live data's plain-English point
-# name to use as a fallback lookup.
-# Skip any (equipment, family, position code) with more than one distinct
-# VIB_ID (e.g. a compressor's CDE position split into "-SPM-5"/"-SPM-7" for
-# two separate physical sensors) — guessing which one a bare position-code
-# match means would risk silently mislabeling real history, worse than
-# leaving it for manual review.
 poscode_candidates = defaultdict(set)
 with open(VIB_MAP_CSV, newline='', encoding='utf-8') as f:
     for row in csv.DictReader(f):
         key = (row['Equipment ID'].strip(), row['Family'].strip().upper(), row['Position Code'].strip().upper())
         poscode_candidates[key].add(row['VIB ID'])
 poscode_lookup = {k: next(iter(v)) for k, v in poscode_candidates.items() if len(v) == 1}
-print('unambiguous position-code fallback entries:', len(poscode_lookup), 'of', len(poscode_candidates))
 
 def derive_position_code(text):
     t = normalize(text)
@@ -77,9 +54,6 @@ def derive_position_code(text):
         return f'RG{m2.group(1)}'
     return None
 
-# Equipment ID corrections agreed on directly with the user (real
-# transcription errors in the live sheet, not new/different equipment) —
-# applied here since this data export still has the old IDs.
 ID_CORRECTIONS = {
     '645.BL580': '465.BL580',
     '645.BL630': '465.BL630',
@@ -95,6 +69,18 @@ def fmt_date(v):
         return v.strftime('%Y-%m-%d')
     return str(v)
 
+def match(eid, family, point, extra_desc=None):
+    key = (eid, family, normalize(extra_desc if extra_desc is not None else point))
+    vib_id = vib_lookup.get(key, '')
+    matched_by = 'text' if vib_id else None
+    if not vib_id:
+        pos = derive_position_code(point)
+        if pos:
+            vib_id = poscode_lookup.get((eid, family, pos), '')
+            if vib_id:
+                matched_by = 'poscode'
+    return vib_id, matched_by
+
 # ---------- RMS DATA ----------
 ws = wb['📥 RMS DATA']
 rms_out = []
@@ -106,22 +92,16 @@ for r in range(4, ws.max_row + 1):
     if not eid and not point:
         continue
     eid = ID_CORRECTIONS.get(str(eid).strip(), str(eid).strip()) if eid else ''
+    point = point if point else ''
     date = ws.cell(row=r, column=5).value
     axial = ws.cell(row=r, column=6).value
     gear = ws.cell(row=r, column=7).value
     horizontal = ws.cell(row=r, column=8).value
     vertical = ws.cell(row=r, column=9).value
-    key = (eid, 'RMS', normalize(point))
-    vib_id = vib_lookup.get(key, '')
-    matched_by = 'text'
-    if not vib_id:
-        pos = derive_position_code(point)
-        if pos:
-            vib_id = poscode_lookup.get((eid, 'RMS', pos), '')
-            if vib_id:
-                matched_by = 'poscode'
+    vib_id, matched_by = match(eid, 'RMS', point)
     rms_stats['matched-' + matched_by if vib_id else 'unmatched'] += 1
-    rms_out.append([vib_id, eid, fmt_date(date), axial, gear, horizontal, vertical])
+    # column order per request: Horizontal, Vertical, Axial, Gear
+    rms_out.append([vib_id, eid, ('' if vib_id else point), fmt_date(date), horizontal, vertical, axial, gear])
     if not vib_id:
         rms_unmatched.append([eid, point, fmt_date(date), r])
 
@@ -140,6 +120,7 @@ for r in range(4, ws.max_row + 1):
     if not eid and not point:
         continue
     eid = ID_CORRECTIONS.get(str(eid).strip(), str(eid).strip()) if eid else ''
+    point = point if point else ''
     type_val = ws.cell(row=r, column=5).value
     date = ws.cell(row=r, column=6).value
     hdm = ws.cell(row=r, column=7).value
@@ -147,26 +128,15 @@ for r in range(4, ws.max_row + 1):
     gs = ws.cell(row=r, column=9).value
 
     type_str = str(type_val).strip() if type_val is not None else ''
-    # VIB Point Map always appends the Type as a parenthetical suffix, even
-    # for the generic "SPM" marker (e.g. "Motor DE (SPM)"), not just numeric
-    # or lettered sensor codes ("Compressor DE (5)", "Motor DE (A)").
     desc = f'{point} ({type_str})' if type_str else point
-    key = (eid, 'SPM', normalize(desc))
-    vib_id = vib_lookup.get(key, '')
-    matched_by = 'text'
-    if not vib_id:
-        pos = derive_position_code(point)
-        if pos:
-            vib_id = poscode_lookup.get((eid, 'SPM', pos), '')
-            if vib_id:
-                matched_by = 'poscode'
+    vib_id, matched_by = match(eid, 'SPM', point, extra_desc=desc)
     spm_stats['matched-' + matched_by if vib_id else 'unmatched'] += 1
-    spm_out.append([vib_id, eid, fmt_date(date), hdm, hdc])
+    spm_out.append([vib_id, eid, ('' if vib_id else point), fmt_date(date), hdm, hdc])
     if not vib_id:
         spm_unmatched.append([eid, point, type_str, fmt_date(date), r])
 
     if gs is not None and gs != '':
-        gs_out.append([vib_id, eid, fmt_date(date), gs])
+        gs_out.append([vib_id, eid, ('' if vib_id else point), fmt_date(date), gs])
         gs_count += 1
 
 print('SPM DATA rows processed:', len(spm_out), dict(spm_stats))
@@ -181,13 +151,13 @@ def write_csv(path, header, rows, seq=True):
             w.writerow(([i] if seq else []) + row)
 
 write_csv(OUT_DIR + 'rms-data-redesigned.csv',
-          ['#', 'VIB ID', 'Equipment ID', 'Date', 'Axial (mm/s)', 'Gear (mm/s)', 'Horizontal (mm/s)', 'Vertical (mm/s)'],
+          ['#', 'VIB ID', 'Equipment ID', 'Point (unmatched only)', 'Date', 'Horizontal (mm/s)', 'Vertical (mm/s)', 'Axial (mm/s)', 'Gear (mm/s)'],
           rms_out)
 write_csv(OUT_DIR + 'spm-data-redesigned.csv',
-          ['#', 'VIB ID', 'Equipment ID', 'Date', 'HDm (dBsv)', 'HDc (dBsv)'],
+          ['#', 'VIB ID', 'Equipment ID', 'Point (unmatched only)', 'Date', 'HDm (dBsv)', 'HDc (dBsv)'],
           spm_out)
 write_csv(OUT_DIR + 'gs-data.csv',
-          ['#', 'VIB ID', 'Equipment ID', 'Date', 'Gs'],
+          ['#', 'VIB ID', 'Equipment ID', 'Point (unmatched only)', 'Date', 'Gs'],
           gs_out)
 
 with open(OUT_DIR + 'rms-data-unmatched.csv', 'w', newline='', encoding='utf-8') as f:

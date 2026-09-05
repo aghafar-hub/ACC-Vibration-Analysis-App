@@ -128,20 +128,29 @@ something this kit does on its own.
 `📥 RMS DATA` and `📥 SPM DATA` tabs — everything else in that workbook was
 out of scope) and rewrites each historical row against
 `vib-point-map-import.csv`, producing ready-to-paste CSVs for the new
-schema (VIB ID + Equipment ID kept as separate columns, Max Velocity
-dropped since it's computed client-side, GS split into its own sheet):
+schema: one row per reading (same granularity as the source data — no
+grouping by month, no reading-slot columns), VIB ID + Equipment ID kept as
+separate columns, Max Velocity dropped since it's computed client-side,
+GS split into its own sheet:
 
 - `rms-data-redesigned.csv` — 6,552 rows. Columns: `#, VIB ID, Equipment ID,
-  Date, Axial (mm/s), Gear (mm/s), Horizontal (mm/s), Vertical (mm/s)`.
+  Point (unmatched only), Date, Horizontal (mm/s), Vertical (mm/s),
+  Axial (mm/s), Gear (mm/s)`.
 - `spm-data-redesigned.csv` — 4,741 rows. Columns: `#, VIB ID, Equipment ID,
-  Date, HDm (dBsv), HDc (dBsv)`.
+  Point (unmatched only), Date, HDm (dBsv), HDc (dBsv)`.
 - `gs-data.csv` — 392 rows, the new GS sheet. Columns: `#, VIB ID,
-  Equipment ID, Date, Gs`. Only rows that actually had a Gs value in the
-  source SPM tab are included.
+  Equipment ID, Point (unmatched only), Date, Gs`. Only rows that actually
+  had a Gs value in the source SPM tab are included.
 - `rms-data-unmatched.csv` / `spm-data-unmatched.csv` — every row where a
   VIB ID could not be resolved (still included in the redesigned CSVs
   above with a blank VIB ID, per your "backfill, don't discard" call —
   these two files are just for finding and fixing them).
+
+The `Point (unmatched only)` column is blank for every row that got a real
+VIB ID, and only holds the original free-text point name (e.g. "BL DE")
+for the ~7-9% of rows that didn't match anything in the master DB — so
+those rows don't lose their identity just because they don't have a VIB ID
+yet.
 
 Matching used a three-tier strategy so nothing gets guessed onto the wrong
 point: (1) exact match against the master DB's Point Description, including
@@ -170,50 +179,7 @@ this script can safely resolve on its own:
   implies (e.g. "Shaft 2 inboard NDE" where the code implies outboard) —
   flagged in the unmatched CSVs rather than force-matched.
 
-The files above (`*-redesigned.csv`) are superseded by the monthly-grouped
-version below — kept only as the intermediate, one-row-per-reading form.
-
-## Monthly-grouped version (one row per VIB ID per month)
-
-Per your follow-up: one row per reading meant the sheet would keep growing
-forever, and you wanted one row per VIB ID per month instead, with that
-month's reading(s) in the same row rather than spread across separate
-rows. `pivot_monthly.py` takes the matched/unmatched data from above and
-groups it that way:
-
-- `rms-data-monthly.csv` — 5,503 rows. Columns: `#, VIB ID, Equipment ID,
-  Point (unmatched only), Month, Date 1, Axial 1, Gear 1, Horizontal 1,
-  Vertical 1, Date 2, Axial 2, ..., Date 3, Axial 3, ...` — 3 repeating
-  reading slots per row, enough for 5,143 of the 5,157 (VIB ID, month)
-  combos found (99.7%).
-- `spm-data-monthly.csv` — 3,805 rows, 2 reading slots (`Date 1/HDm 1/HDc 1,
-  Date 2/HDm 2/HDc 2`) — covers all but 3 of the SPM combos.
-- `gs-data-monthly.csv` — 374 rows, 2 reading slots (`Date 1/Gs 1, Date
-  2/Gs 2`) — covers every GS combo, no overflow.
-- `rms-data-monthly-overflow.csv` (35 rows) / `spm-data-monthly-overflow.csv`
-  (3 rows) — readings beyond the 3rd/2nd slot for a given VIB ID + month.
-  Almost all of this comes from two fans (`331.FN400`, `441.FN.590`) that
-  were clearly monitored daily for a short trial/commissioning period in
-  Dec 2024/Jan 2025, not the normal monthly route — worth a look before
-  deciding whether to add a 4th slot just for those two, or leave the extra
-  daily readings in this side file.
-
-Two decisions I made without asking, flagged here so you can correct me:
-
-1. **Exact duplicate rows are dropped.** 604 RMS rows and 711 SPM rows
-   were byte-for-byte identical to another row for the same VIB ID/date
-   (same values, logged twice) — these add no information, so they were
-   collapsed to one before filling the reading slots, rather than wasting
-   a slot on a repeat of the same number.
-2. **Unmatched rows (no VIB ID) are grouped by Equipment ID + the original
-   point text**, not by VIB ID (which would be blank and merge unrelated
-   points together). Their point text is kept in the new
-   `Point (unmatched only)` column specifically so this grouping stays
-   correct and the point's identity isn't lost — once these points get
-   proper VIB IDs, that column empties out and they behave like everything
-   else.
-
-Paste `rms-data-monthly.csv` / `spm-data-monthly.csv` / `gs-data-monthly.csv`
+Paste `rms-data-redesigned.csv` / `spm-data-redesigned.csv` / `gs-data.csv`
 over the new `📥 RMS DATA` / `📥 SPM DATA` / new GS tabs in your sandbox once
 you've applied the new schema's column headers. The app's own read/write
 code (`parsers.js`, `App.jsx`) hasn't been updated for the new lean columns
